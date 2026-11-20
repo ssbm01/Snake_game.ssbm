@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Space Trails</title>
+  <link rel="icon" type="image/png" href="icon.png" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <!-- Looping Background Music -->
+  <audio id="bgMusic" src="song.mp3" loop preload="auto"></audio>
+
+  <!-- Main Game Canvas -->
+  <canvas id="gameCanvas"></canvas>
+
+  <!-- In-Game HUD -->
+  <div id="hud" class="hidden">
+    <!-- Top Left: Live Leaderboard -->
+    <div id="leaderboard">
+      <div id="lbList"></div>
+      <div id="lbSelf"></div>
+    </div>
+
+    <!-- Top Center: Score Bar -->
+    <div id="topCenter">
+      <div class="score-pill">
+        <span id="scoreVal">0</span>
+        <span class="trophy">🏆</span>
+      </div>
+    </div>
+
+    <!-- Top Right: Pause / Menu Button -->
+    <button id="exitBtn" aria-label="Pause">✕</button>
+
+    <!-- Bottom Left: Speed Booster Button -->
+    <button id="boostBtn" class="disabled" aria-label="Boost">
+      <svg viewBox="0 0 64 64" width="38" height="38">
+        <path d="M16 32 L32 16 L48 32" fill="none" stroke="#ffffff" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M16 48 L32 32 L48 48" fill="none" stroke="#ffffff" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </button>
+
+    <!-- Bottom Right: Round Minimap -->
+    <canvas id="minimap" width="104" height="104"></canvas>
+  </div>
+
+  <!-- Start Screen -->
+  <div id="startScreen" class="overlay">
+    <!-- Top Score -->
+    <div class="start-top">
+      <div class="score-pill big-pill">
+        <span>Best Score: <b id="bestScoreDisplay">0</b></span>
+        <span class="trophy">🏆</span>
+      </div>
+      <div class="last-score">Last Score: <b id="lastScoreDisplay">0</b></div>
+    </div>
+
+    <!-- Center Play & Name -->
+    <div class="start-center">
+      <h1 class="game-title">SPACE TRAILS</h1>
+      <div class="name-row">
+        <label for="playerNameInput" class="name-label">Name:</label>
+        <input type="text" id="playerNameInput" maxlength="10" placeholder="Enter name" />
+      </div>
+      <button id="playBtn">
+        <span class="play-icon">▶</span>
+        <span>PLAY</span>
+      </button>
+    </div>
+
+    <!-- Bottom Customize Snake Body -->
+    <div class="customize-box">
+      <div class="custom-header">Customize Snake Body</div>
+      <canvas id="previewCanvas" width="260" height="56"></canvas>
+
+      <div class="custom-label">Body Color</div>
+      <div id="colorPicker" class="picker-row"></div>
+
+      <div class="custom-label">Emoji / Pattern Style</div>
+      <div id="patternPicker" class="picker-row"></div>
+    </div>
+  </div>
+
+  <!-- Pause Menu -->
+  <div id="pauseScreen" class="overlay center-overlay hidden">
+    <div class="modal-card">
+      <h2>⏸️ Paused</h2>
+      <button id="resumeBtn" class="go-btn primary">Resume ▶</button>
+      <button id="quitBtn" class="go-btn danger">Quit</button>
+    </div>
+  </div>
+
+  <!-- Game Over Popup -->
+  <div id="gameOverScreen" class="overlay center-overlay hidden">
+    <div class="modal-card">
+      <h2 class="gameover-title">Game Over</h2>
+      <div class="go-stats">
+        <div>Your Score: <b id="goScore">0</b></div>
+        <div>Best Score: <b id="goBest">0</b></div>
+        <div>Final Rank: <b id="goRank">#1</b></div>
+      </div>
+      <button id="retryBtn" class="go-btn primary">Play Again ▶</button>
+      <button id="menuBtn" class="go-btn secondary">Main Menu</button>
+    </div>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
