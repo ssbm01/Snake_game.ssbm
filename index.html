@@ -8,6 +8,7 @@
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
+
   <!-- Looping Background Music -->
   <audio id="bgMusic" src="song.mp3" loop preload="auto"></audio>
 
@@ -22,12 +23,13 @@
       <div id="lbSelf"></div>
     </div>
 
-    <!-- Top Center: Score Bar -->
-    <div id="topCenter">
+    <!-- Top Center: Score Bar + FPS -->
+    <div id="topCenter" style="display: flex; align-items: center; gap: 8px;">
       <div class="score-pill">
         <span id="scoreVal">0</span>
         <span class="trophy">🏆</span>
       </div>
+      <div class="fps-badge hud-fps">60 FPS</div>
     </div>
 
     <!-- Top Right: Pause / Menu Button -->
@@ -47,18 +49,19 @@
 
   <!-- Start Screen -->
   <div id="startScreen" class="overlay">
-    <!-- Top Score -->
+    <!-- Top Score + FPS -->
     <div class="start-top">
       <div class="score-pill big-pill">
         <span>Best Score: <b id="bestScoreDisplay">0</b></span>
         <span class="trophy">🏆</span>
       </div>
       <div class="last-score">Last Score: <b id="lastScoreDisplay">0</b></div>
+      <div class="fps-badge menu-fps">60 FPS</div>
     </div>
 
     <!-- Center Play & Name -->
     <div class="start-center">
-      <h1 class="game-title">SSBM SPACE TRAILS</h1>
+      <h1 class="game-title">SSBM SPACE TRAIL</h1>
       <div class="name-row">
         <label for="playerNameInput" class="name-label">Name:</label>
         <input type="text" id="playerNameInput" maxlength="10" placeholder="Enter name" />
