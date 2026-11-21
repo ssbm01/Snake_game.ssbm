@@ -7,14 +7,22 @@
   -webkit-tap-highlight-color: transparent;
 }
 
+
+canvas {
+  touch-action: none;
+}
+
 html, body {
   width: 100%;
   height: 100%;
   overflow: hidden;
+  overscroll-behavior: none;
+  touch-action: none;
   background: #060b24;
   font-family: 'Segoe UI', system-ui, sans-serif;
   color: #ffffff;
 }
+
 
 #gameCanvas {
   display: block;
@@ -436,4 +444,35 @@ html, body {
 .go-btn.secondary {
   background: rgba(255, 255, 255, 0.16);
   border: 1.5px solid rgba(255, 255, 255, 0.3);
+}
+
+.fps-badge {
+  display: inline-block;
+  white-space: nowrap;
+  flex-shrink: 0;
+  padding: 4px 12px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.2);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  pointer-events: none;
+  user-select: none;
+}
+
+
+/* Main Menu-তে Last Score-এর নিচে সুন্দর গ্যাপ রাখার জন্য */
+.menu-fps {
+  margin-top: 8px;
+}
+
+/* Playing Window-এ Score-এর পাশে রাখার জন্য */
+.hud-fps {
+  margin-left: 8px;
+  vertical-align: middle;
 }
