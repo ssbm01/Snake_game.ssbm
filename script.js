@@ -1198,3 +1198,30 @@
   requestAnimationFrame(loop);
 })();
 
+// Live FPS Counter
+(function () {
+  const fpsEls = document.querySelectorAll('.fps-badge');
+  if (!fpsEls.length) return;
+
+  let frameCount = 0;
+  let lastTime = performance.now();
+
+  function updateFPS(now) {
+    frameCount++;
+    const delta = now - lastTime;
+
+    if (delta >= 500) {
+      const fps = Math.round((frameCount * 1000) / delta);
+      fpsEls.forEach(el => {
+        el.textContent = fps + ' FPS';
+      });
+      frameCount = 0;
+      lastTime = now;
+    }
+
+    requestAnimationFrame(updateFPS);
+  }
+
+  requestAnimationFrame(updateFPS);
+})();
+
