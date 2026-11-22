@@ -26,16 +26,31 @@
   const menuBtn = document.getElementById('menuBtn');
   const nameInput = document.getElementById('playerNameInput');
 
+  // Multiplayer DOM References
+  const createRoomBtn = document.getElementById('createRoomBtn');
+  const joinRoomBtn = document.getElementById('joinRoomBtn');
+  const mpModal = document.getElementById('mpModal');
+  const mpModalTitle = document.getElementById('mpModalTitle');
+  const mpStatus = document.getElementById('mpStatus');
+  const hostBox = document.getElementById('hostBox');
+  const roomCodeDisplay = document.getElementById('roomCodeDisplay');
+  const startMpGameBtn = document.getElementById('startMpGameBtn');
+  const joinBox = document.getElementById('joinBox');
+  const joinCodeInput = document.getElementById('joinCodeInput');
+  const connectRoomBtn = document.getElementById('connectRoomBtn');
+  const closeMpBtn = document.getElementById('closeMpBtn');
+
   // ===== Game Constants =====
   const WORLD_RADIUS = 1650;
-  const WALL_INNER_RADIUS = WORLD_RADIUS - 36; // Strict inner stone boundary
+  const WALL_INNER_RADIUS = WORLD_RADIUS - 36;
   const AI_COUNT = 18;
+  const MP_AI_COUNT = 8;
   const BASE_FOOD_COUNT = 220;
   const BASE_SPEED = 132;
   const BOOST_SPEED = 248;
   const TURN_SPEED = 4.6;
+  const ROOM_PREFIX = 'ssbm-st-';
 
-  // 12 Diverse Colors
   const COLORS = [
     { name: 'Red', main: '#ff3b4e', dark: '#9e1120', light: '#ff8a96' },
     { name: 'Cyan', main: '#2be4ff', dark: '#087996', light: '#9ef4ff' },
@@ -67,7 +82,7 @@
   ];
   const RANDOM_PLAYER_NAMES = ['Mc', 'Nova', 'Ace', 'Rex', 'Sky', 'Zed', 'Kai', 'Leo'];
 
-  // ===== Sound Engine (Web Audio API) =====
+  // ===== Sound Engine =====
   let audioCtx = null;
   let lastBoostSound = 0;
 
@@ -111,7 +126,6 @@
     playTone(170, 265, 0.12, 'sawtooth', 0.055);
   }
 
-  // Softer, smoother Blast Sound Effect
   function sfxBlast(volumeScale = 1) {
     if (!audioCtx) return;
     const now = audioCtx.currentTime;
@@ -140,7 +154,6 @@
     nGain.connect(audioCtx.destination);
     noise.start(now);
 
-    // Warm smooth pop/thump instead of harsh crunch
     playTone(125, 36, 0.36, 'sine', 0.38 * volumeScale);
     playTone(85, 28, 0.42, 'triangle', 0.3 * volumeScale);
   }
@@ -160,7 +173,7 @@
   window.addEventListener('pagehide', stopMusic);
 
   // ===== Game State =====
-  let state = 'menu'; // 'menu' | 'playing' | 'paused' | 'gameover'
+  let state = 'menu';
   let selectedColorIdx = 7;
   let selectedPattern = 'flower';
   let bestScore = parseInt(localStorage.getItem('st_best') || '0', 10);
@@ -184,6 +197,35 @@
   let gameOverTimer = null;
   let colorCycleIdx = 0;
 
+  // ===== Multiplayer State (PeerJS) =====
+  let mpMode = false;
+  let isHost = false;
+  let peer = null;
+  let hostConn = null;        // Guest -> Host connection
+  let guestConns = new Map(); // Host -> Guests map: peerId -> { conn, info, snake }
+  let myPeerId = '';
+  let lastNetSync = 0;
+  let guestTargetAngle = 0;
+  let guestAlive = true;
+
+  function cleanupMultiplayer() {
+    mpMode = false;
+    isHost = false;
+    if (hostConn) {
+      try { hostConn.close(); } catch (e) {}
+      hostConn = null;
+    }
+    guestConns.forEach(g => {
+      try { g.conn.close(); } catch (e) {}
+    });
+    guestConns.clear();
+    if (peer) {
+      try { peer.destroy(); } catch (e) {}
+      peer = null;
+    }
+    myPeerId = '';
+  }
+
   function resize() {
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
@@ -191,7 +233,7 @@
   window.addEventListener('resize', resize);
   resize();
 
-  // ===== Bright Moving Stars & Dense 3D Blue-Purple Stone Wall =====
+  // ===== Stars & Stone Wall =====
   function initEnvironment() {
     stars = [];
     const starTints = ['#ffffff', '#cce8ff', '#fff2b8', '#d6c7ff'];
@@ -209,7 +251,6 @@
     }
 
     stones = [];
-    // Inner dense overlapping stone ring (no gaps)
     const innerCount = 150;
     for (let i = 0; i < innerCount; i++) {
       const a = (i / innerCount) * Math.PI * 2;
@@ -224,7 +265,6 @@
         layer: 'front'
       });
     }
-    // Outer scattered floating stones behind the wall
     const outerCount = 85;
     for (let i = 0; i < outerCount; i++) {
       const a = (i / outerCount) * Math.PI * 2 + Math.random() * 0.05;
@@ -262,27 +302,295 @@
 
   // ===== Snake Class =====
   class Snake {
-    constructor(name, x, y, colorObj, pattern, isPlayer = false, initScore = 0) {
+    constructor(name, x, y, colorObj, pattern, isPlayer = false, initScore = 0, netId = null) {
       this.name = name;
       this.x = x;
       this.y = y;
       this.angle = Math.random() * Math.PI * 2;
       this.targetAngle = this.angle;
       this.color = colorObj;
+      this.colorIdx = COLORS.indexOf(colorObj);
       this.pattern = pattern;
       this.isPlayer = isPlayer;
+      this.netId = netId; // null for AI, peerId for Host/Guest
       this.score = initScore;
       this.alive = true;
       this.boosting = false;
       this.boostHoldTime = 0;
       this.aiTimer = 0;
-      this.shieldTimer = isPlayer ? 3.0 : 0;
+      this.shieldTimer = (isPlayer || netId) ? 3.0 : 0;
 
       this.path = [];
       const initLen = this.getSegmentCount() * 4;
       for (let i = 0; i < initLen; i++) {
         this.path.push({
           x: x - Math.cos(this.angle) * i * 2.2,
+          y: y - Math.sin(this.angle) * i * 2.2
+        });
+      }
+      this.segments = [];
+      this.rebuildSegments();
+    }
+
+    getRadius() {
+      return Math.min(34, 8.5 + Math.pow(Math.max(0, this.score), 0.39) * 0.92);
+    }
+
+    getSegmentCount() {
+      return Math.min(220, 14 + Math.floor(Math.max(0, this.score) / 10));
+    }
+
+    getFlareCount() {
+      if (this === kingSnake) return 5;
+      if (this.score >= 1600) return 5;
+      if (this.score >= 850) return 4;
+      if (this.score >= 380) return 3;
+      if (this.score >= 130) return 2;
+      return 1;
+    }
+
+    rebuildSegments() {
+      const targetSegs = this.getSegmentCount();
+      const spacing = this.getRadius() * 0.46;
+      const segs = [{ x: this.x, y: this.y }];
+      let acc = 0;
+      let prev = this.path[0] || { x: this.x, y: this.y };
+
+      for (let i = 1; i < this.path.length && segs.length < targetSegs; i++) {
+        const pt = this.path[i];
+        const d = Math.hypot(pt.x - prev.x, pt.y - prev.y);
+        acc += d;
+        if (acc >= spacing) {
+          segs.push({ x: pt.x, y: pt.y });
+          acc = 0;
+        }
+        prev = pt;
+      }
+      const maxPath = Math.max(90, targetSegs * 9);
+      if (this.path.length > maxPath) this.path.length = maxPath;
+      this.segments = segs;
+    }
+
+    update(dt) {
+      if (!this.alive) return;
+      if (this.shieldTimer > 0) this.shieldTimer = Math.max(0, this.shieldTimer - dt);
+
+      if (!this.isPlayer && !this.netId) this.updateAI(dt);
+
+      if (this.boosting && this.score >= 100) {
+        this.boostHoldTime += dt;
+        const drainRate = Math.min(20, 8 + this.boostHoldTime * 4.5);
+        this.score = Math.max(0, this.score - drainRate * dt);
+        if (this.isPlayer) sfxBoost();
+        if (this.score < 100) {
+          this.boosting = false;
+          this.boostHoldTime = 0;
+        }
+      } else {
+        this.boosting = false;
+        this.boostHoldTime = 0;
+      }
+
+      let diff = Math.atan2(
+        Math.sin(this.targetAngle - this.angle),
+        Math.cos(this.targetAngle - this.angle)
+      );
+      const maxTurn = TURN_SPEED * dt;
+      if (Math.abs(diff) <= maxTurn) this.angle = this.targetAngle;
+      else this.angle += Math.sign(diff) * maxTurn;
+
+      const spd = this.boosting ? BOOST_SPEED : BASE_SPEED;
+      this.x += Math.cos(this.angle) * spd * dt;
+      this.y += Math.sin(this.angle) * spd * dt;
+
+      const distCenter = Math.hypot(this.x, this.y);
+      const maxAllowed = WALL_INNER_RADIUS - this.getRadius();
+      if (distCenter >= maxAllowed) {
+        const nx = this.x / distCenter;
+        const ny = this.y / distCenter;
+        this.x = nx * maxAllowed;
+        this.y = ny * maxAllowed;
+        killSnake(this);
+        return;
+      }
+
+      this.path.unshift({ x: this.x, y: this.y });
+      this.rebuildSegments();
+    }
+
+    updateAI(dt) {
+      this.aiTimer -= dt;
+      const distCenter = Math.hypot(this.x, this.y);
+
+      if (distCenter > WALL_INNER_RADIUS - 260) {
+        this.targetAngle = Math.atan2(-this.y, -this.x) + (Math.random() - 0.5) * 0.35;
+        this.boosting = false;
+        return;
+      }
+
+      const lookX = this.x + Math.cos(this.angle) * 125;
+      const lookY = this.y + Math.sin(this.angle) * 125;
+      for (const other of snakes) {
+        if (other === this || !other.alive) continue;
+        for (let i = 0; i < other.segments.length; i += 2) {
+          const s = other.segments[i];
+          const d = Math.hypot(lookX - s.x, lookY - s.y);
+          if (d < other.getRadius() + 72) {
+            this.targetAngle = Math.atan2(this.y - s.y, this.x - s.x);
+            this.boosting = this.score > 160 && Math.random() < 0.28;
+            return;
+          }
+        }
+      }
+
+      if (this.aiTimer <= 0) {
+        this.aiTimer = 0.28 + Math.random() * 0.35;
+        let bestFood = null;
+        let bestScoreDist = 360;
+        for (let i = 0; i < foods.length; i += 2) {
+          const f = foods[i];
+          const d = Math.hypot(f.x - this.x, f.y - this.y);
+          const weight = f.type === 'medium' ? d * 0.65 : d;
+          if (weight < bestScoreDist) {
+            bestScoreDist = weight;
+            bestFood = f;
+          }
+        }
+        if (bestFood) {
+          this.targetAngle = Math.atan2(bestFood.y - this.y, bestFood.x - this.x);
+          this.boosting = this.score > 180 && bestFood.type === 'medium' && Math.random() < 0.22;
+        } else {
+          this.targetAngle += (Math.random() - 0.5) * 1.1;
+          this.boosting = false;
+        }
+      }
+    }
+  }
+
+  // ===== Blast & Death Drop =====
+  function createBlast(x, y, colorHex) {
+    particles.push({ x, y, r: 12, alpha: 1, type: 'wave' });
+    for (let i = 0; i < 36; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const spd = 65 + Math.random() * 240;
+      particles.push({
+        x, y,
+        vx: Math.cos(a) * spd,
+        vy: Math.sin(a) * spd,
+        r: 4 + Math.random() * 11,
+        alpha: 1,
+        decay: 1.3 + Math.random() * 1.1,
+        type: 'fire',
+        color: i % 3 === 0 ? '#fff59d' : (i % 2 === 0 ? '#ff8f1f' : colorHex)
+      });
+    }
+  }
+
+  function killSnake(snake) {
+    if (!snake.alive) return;
+    snake.alive = false;
+    createBlast(snake.x, snake.y, snake.color.main);
+
+    for (let i = 0; i < snake.segments.length; i += 2) {
+      const seg = snake.segments[i];
+      spawnFood(
+        seg.x + (Math.random() - 0.5) * 24,
+        seg.y + (Math.random() - 0.5) * 24,
+        snake.color.main,
+        Math.random() < 0.55 ? 'medium' : 'small'
+      );
+    }
+
+    if (snake.isPlayer) {
+      sfxBlast(1.0);
+      lastScore = Math.floor(snake.score);
+      if (lastScore > bestScore) {
+        bestScore = lastScore;
+        localStorage.setItem('st_best', String(bestScore));
+      }
+      clearTimeout(gameOverTimer);
+      gameOverTimer = setTimeout(() => {
+        if (state === 'playing') showGameOver();
+      }, 2000);
+    } else if (!snake.netId) {
+      if (player && Math.hypot(snake.x - player.x, snake.y - player.y) < 620) {
+        sfxBlast(0.6);
+      }
+      setTimeout(() => {
+        if (state === 'playing' && (!mpMode || isHost)) spawnBot(false);
+      }, 2200);
+    } else {
+      // A connected multiplayer guest died
+      if (player && Math.hypot(snake.x - player.x, snake.y - player.y) < 620) {
+        sfxBlast(0.8);
+      }
+      const g = guestConns.get(snake.netId);
+      if (g && g.conn.open) {
+        g.conn.send({ type: 'dead', score: Math.floor(snake.score) });
+      }
+    }
+  }
+
+  function getNextDiverseColor() {
+    const col = COLORS[colorCycleIdx % COLORS.length];
+    colorCycleIdx++;
+    return col;
+  }
+
+  function spawnBot(initial = false) {
+    const a = Math.random() * Math.PI * 2;
+    const minDist = initial ? 430 : 250;
+    const d = minDist + Math.random() * (WALL_INNER_RADIUS - minDist - 180);
+    const col = getNextDiverseColor();
+    const pat = PATTERNS[Math.floor(Math.random() * PATTERNS.length)].id;
+    const name = BOT_NAMES[Math.floor(Math.random() * BOT_NAMES.length)];
+    let sc = Math.floor(Math.random() * 90);
+    if (initial) {
+      const r = Math.random();
+      if (r > 0.85) sc = 900 + Math.floor(Math.random() * 1100);
+      else if (r > 0.5) sc = 200 + Math.floor(Math.random() * 500);
+    }
+    snakes.push(new Snake(name, Math.cos(a) * d, Math.sin(a) * d, col, pat, false, sc));
+  }
+
+  // ===== Collision & Food Eating =====
+  function handleInteractions() {
+    for (const s of snakes) {
+      if (!s.alive) continue;
+      const eatDist = s.getRadius() + 13;
+      for (let i = foods.length - 1; i >= 0; i--) {
+        const f = foods[i];
+        const dx = s.x - f.x;
+        const dy = s.y - f.y;
+        if (dx * dx + dy * dy < (eatDist + f.r) * (eatDist + f.r)) {
+          let pts = f.type === 'medium' ? 20 : 5;
+          if (Math.random() < 0.16) {
+            pts = 5 + Math.floor(Math.random() * 41);
+          }
+          s.score += pts;
+          if (s.isPlayer) {
+            sfxEat(f.type === 'medium' || pts > 20);
+            popups.push({ x: f.x, y: f.y, text: `+${pts}`, alpha: 1, color: f.color });
+          }
+          foods.splice(i, 1);
+        }
+      }
+    }
+
+    while (foods.length < BASE_FOOD_COUNT) spawnFood();
+
+    const toKill = new Set();
+    for (const a of snakes) {
+      if (!a.alive || a.shieldTimer > 0) continue;
+      const radA = a.getRadius();
+      for (const b of snakes) {
+        if (a === b || !b.alive) continue;
+        const radB = b.getRadius();
+
+        const hdx = a.x - b.x;
+        const hdy = a.y - b.y;
+        const headHit = (radA + radB) * 0.86;
+        if (hdx * hdx + hdy * hdy < headHi.cos(this.angle) * i * 2.2,
           y: y - Math.sin(this.angle) * i * 2.2
         });
       }
