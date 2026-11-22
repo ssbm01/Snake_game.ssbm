@@ -201,8 +201,8 @@
   let mpMode = false;
   let isHost = false;
   let peer = null;
-  let hostConn = null;        // Guest -> Host connection
-  let guestConns = new Map(); // Host -> Guests map: peerId -> { conn, info, snake }
+  let hostConn = null;
+  let guestConns = new Map();
   let myPeerId = '';
   let lastNetSync = 0;
   let guestTargetAngle = 0;
@@ -312,7 +312,7 @@
       this.colorIdx = COLORS.indexOf(colorObj);
       this.pattern = pattern;
       this.isPlayer = isPlayer;
-      this.netId = netId; // null for AI, peerId for Host/Guest
+      this.netId = netId;
       this.score = initScore;
       this.alive = true;
       this.boosting = false;
@@ -520,7 +520,6 @@
         if (state === 'playing' && (!mpMode || isHost)) spawnBot(false);
       }, 2200);
     } else {
-      // A connected multiplayer guest died
       if (player && Math.hypot(snake.x - player.x, snake.y - player.y) < 620) {
         sfxBlast(0.8);
       }
@@ -590,265 +589,6 @@
         const hdx = a.x - b.x;
         const hdy = a.y - b.y;
         const headHit = (radA + radB) * 0.86;
-        if (hdx * hdx + hdy * hdy < headHi.cos(this.angle) * i * 2.2,
-          y: y - Math.sin(this.angle) * i * 2.2
-        });
-      }
-      this.segments = [];
-      this.rebuildSegments();
-    }
-
-    // Starts slim (8.5px) and gradually grows thicker with length/score
-    getRadius() {
-      return Math.min(34, 8.5 + Math.pow(Math.max(0, this.score), 0.39) * 0.92);
-    }
-
-    getSegmentCount() {
-      return Math.min(220, 14 + Math.floor(Math.max(0, this.score) / 10));
-    }
-
-    getFlareCount() {
-      if (this === kingSnake) return 5;
-      if (this.score >= 1600) return 5;
-      if (this.score >= 850) return 4;
-      if (this.score >= 380) return 3;
-      if (this.score >= 130) return 2;
-      return 1;
-    }
-
-    rebuildSegments() {
-      const targetSegs = this.getSegmentCount();
-      const spacing = this.getRadius() * 0.46;
-      const segs = [{ x: this.x, y: this.y }];
-      let acc = 0;
-      let prev = this.path[0] || { x: this.x, y: this.y };
-
-      for (let i = 1; i < this.path.length && segs.length < targetSegs; i++) {
-        const pt = this.path[i];
-        const d = Math.hypot(pt.x - prev.x, pt.y - prev.y);
-        acc += d;
-        if (acc >= spacing) {
-          segs.push({ x: pt.x, y: pt.y });
-          acc = 0;
-        }
-        prev = pt;
-      }
-      const maxPath = Math.max(90, targetSegs * 9);
-      if (this.path.length > maxPath) this.path.length = maxPath;
-      this.segments = segs;
-    }
-
-    update(dt) {
-      if (!this.alive) return;
-      if (this.shieldTimer > 0) this.shieldTimer = Math.max(0, this.shieldTimer - dt);
-
-      if (!this.isPlayer) this.updateAI(dt);
-
-      if (this.boosting && this.score >= 100) {
-        this.boostHoldTime += dt;
-        const drainRate = Math.min(20, 8 + this.boostHoldTime * 4.5);
-        this.score = Math.max(0, this.score - drainRate * dt);
-        if (this.isPlayer) sfxBoost();
-        if (this.score < 100) {
-          this.boosting = false;
-          this.boostHoldTime = 0;
-        }
-      } else {
-        this.boosting = false;
-        this.boostHoldTime = 0;
-      }
-
-      let diff = Math.atan2(
-        Math.sin(this.targetAngle - this.angle),
-        Math.cos(this.targetAngle - this.angle)
-      );
-      const maxTurn = TURN_SPEED * dt;
-      if (Math.abs(diff) <= maxTurn) this.angle = this.targetAngle;
-      else this.angle += Math.sign(diff) * maxTurn;
-
-      const spd = this.boosting ? BOOST_SPEED : BASE_SPEED;
-      this.x += Math.cos(this.angle) * spd * dt;
-      this.y += Math.sin(this.angle) * spd * dt;
-
-      // Strict Stone Wall Boundary Check (impossible to cross outside)
-      const distCenter = Math.hypot(this.x, this.y);
-      const maxAllowed = WALL_INNER_RADIUS - this.getRadius();
-      if (distCenter >= maxAllowed) {
-        const nx = this.x / distCenter;
-        const ny = this.y / distCenter;
-        this.x = nx * maxAllowed;
-        this.y = ny * maxAllowed;
-        killSnake(this);
-        return;
-      }
-
-      this.path.unshift({ x: this.x, y: this.y });
-      this.rebuildSegments();
-    }
-
-    updateAI(dt) {
-      this.aiTimer -= dt;
-      const distCenter = Math.hypot(this.x, this.y);
-
-      if (distCenter > WALL_INNER_RADIUS - 260) {
-        this.targetAngle = Math.atan2(-this.y, -this.x) + (Math.random() - 0.5) * 0.35;
-        this.boosting = false;
-        return;
-      }
-
-      const lookX = this.x + Math.cos(this.angle) * 125;
-      const lookY = this.y + Math.sin(this.angle) * 125;
-      for (const other of snakes) {
-        if (other === this || !other.alive) continue;
-        for (let i = 0; i < other.segments.length; i += 2) {
-          const s = other.segments[i];
-          const d = Math.hypot(lookX - s.x, lookY - s.y);
-          if (d < other.getRadius() + 72) {
-            this.targetAngle = Math.atan2(this.y - s.y, this.x - s.x);
-            this.boosting = this.score > 160 && Math.random() < 0.28;
-            return;
-          }
-        }
-      }
-
-      if (this.aiTimer <= 0) {
-        this.aiTimer = 0.28 + Math.random() * 0.35;
-        let bestFood = null;
-        let bestScoreDist = 360;
-        for (let i = 0; i < foods.length; i += 2) {
-          const f = foods[i];
-          const d = Math.hypot(f.x - this.x, f.y - this.y);
-          const weight = f.type === 'medium' ? d * 0.65 : d;
-          if (weight < bestScoreDist) {
-            bestScoreDist = weight;
-            bestFood = f;
-          }
-        }
-        if (bestFood) {
-          this.targetAngle = Math.atan2(bestFood.y - this.y, bestFood.x - this.x);
-          this.boosting = this.score > 180 && bestFood.type === 'medium' && Math.random() < 0.22;
-        } else {
-          this.targetAngle += (Math.random() - 0.5) * 1.1;
-          this.boosting = false;
-        }
-      }
-    }
-  }
-
-  // ===== Blast & Death Drop =====
-  function createBlast(x, y, colorHex) {
-    particles.push({ x, y, r: 12, alpha: 1, type: 'wave' });
-    for (let i = 0; i < 36; i++) {
-      const a = Math.random() * Math.PI * 2;
-      const spd = 65 + Math.random() * 240;
-      particles.push({
-        x, y,
-        vx: Math.cos(a) * spd,
-        vy: Math.sin(a) * spd,
-        r: 4 + Math.random() * 11,
-        alpha: 1,
-        decay: 1.3 + Math.random() * 1.1,
-        type: 'fire',
-        color: i % 3 === 0 ? '#fff59d' : (i % 2 === 0 ? '#ff8f1f' : colorHex)
-      });
-    }
-  }
-
-  function killSnake(snake) {
-    if (!snake.alive) return;
-    snake.alive = false;
-    createBlast(snake.x, snake.y, snake.color.main);
-
-    for (let i = 0; i < snake.segments.length; i += 2) {
-      const seg = snake.segments[i];
-      spawnFood(
-        seg.x + (Math.random() - 0.5) * 24,
-        seg.y + (Math.random() - 0.5) * 24,
-        snake.color.main,
-        Math.random() < 0.55 ? 'medium' : 'small'
-      );
-    }
-
-    if (snake.isPlayer) {
-      sfxBlast(1.0);
-      lastScore = Math.floor(snake.score);
-      if (lastScore > bestScore) {
-        bestScore = lastScore;
-        localStorage.setItem('st_best', String(bestScore));
-      }
-      clearTimeout(gameOverTimer);
-      gameOverTimer = setTimeout(() => {
-        if (state === 'playing') showGameOver();
-      }, 2000);
-    } else {
-      if (player && Math.hypot(snake.x - player.x, snake.y - player.y) < 620) {
-        sfxBlast(0.6);
-      }
-      setTimeout(() => {
-        if (state === 'playing') spawnBot(false);
-      }, 2200);
-    }
-  }
-
-  function getNextDiverseColor() {
-    const col = COLORS[colorCycleIdx % COLORS.length];
-    colorCycleIdx++;
-    return col;
-  }
-
-  function spawnBot(initial = false) {
-    const a = Math.random() * Math.PI * 2;
-    const minDist = initial ? 430 : 250;
-    const d = minDist + Math.random() * (WALL_INNER_RADIUS - minDist - 180);
-    const col = getNextDiverseColor();
-    const pat = PATTERNS[Math.floor(Math.random() * PATTERNS.length)].id;
-    const name = BOT_NAMES[Math.floor(Math.random() * BOT_NAMES.length)];
-    let sc = Math.floor(Math.random() * 90);
-    if (initial) {
-      const r = Math.random();
-      if (r > 0.85) sc = 900 + Math.floor(Math.random() * 1100);
-      else if (r > 0.5) sc = 200 + Math.floor(Math.random() * 500);
-    }
-    snakes.push(new Snake(name, Math.cos(a) * d, Math.sin(a) * d, col, pat, false, sc));
-  }
-
-  // ===== Strict Collision & Food Eating =====
-  function handleInteractions() {
-    for (const s of snakes) {
-      if (!s.alive) continue;
-      const eatDist = s.getRadius() + 13;
-      for (let i = foods.length - 1; i >= 0; i--) {
-        const f = foods[i];
-        const dx = s.x - f.x;
-        const dy = s.y - f.y;
-        if (dx * dx + dy * dy < (eatDist + f.r) * (eatDist + f.r)) {
-          let pts = f.type === 'medium' ? 20 : 5;
-          if (Math.random() < 0.16) {
-            pts = 5 + Math.floor(Math.random() * 41);
-          }
-          s.score += pts;
-          if (s.isPlayer) {
-            sfxEat(f.type === 'medium' || pts > 20);
-            popups.push({ x: f.x, y: f.y, text: `+${pts}`, alpha: 1, color: f.color });
-          }
-          foods.splice(i, 1);
-        }
-      }
-    }
-
-    while (foods.length < BASE_FOOD_COUNT) spawnFood();
-
-    const toKill = new Set();
-    for (const a of snakes) {
-      if (!a.alive || a.shieldTimer > 0) continue;
-      const radA = a.getRadius();
-      for (const b of snakes) {
-        if (a === b || !b.alive) continue;
-        const radB = b.getRadius();
-
-        const hdx = a.x - b.x;
-        const hdy = a.y - b.y;
-        const headHit = (radA + radB) * 0.86;
         if (hdx * hdx + hdy * hdy < headHit * headHit) {
           toKill.add(a);
           if (b.shieldTimer <= 0) toKill.add(b);
@@ -871,7 +611,7 @@
     }
 
     toKill.forEach(s => killSnake(s));
-    snakes = snakes.filter(s => s.alive || s.isPlayer);
+    snakes = snakes.filter(s => s.alive || s.isPlayer || s.netId);
   }
 
   // ===== Drawing Functions =====
@@ -911,8 +651,6 @@
 
   function drawStoneWall() {
     const viewLim = Math.max(canvas.width, canvas.height) / camera.zoom + 160;
-
-    // Draw back floating stones first, then dense front stone ring
     for (const layer of ['back', 'front']) {
       for (const st of stones) {
         if (st.layer !== layer) continue;
@@ -926,7 +664,6 @@
         ctx.translate(sx, sy);
         ctx.rotate(st.rot + worldTime * st.rotSpeed);
 
-        // 3D Blue-Purple Shaded Asteroid Rock
         const grad = ctx.createRadialGradient(-st.rx * 0.3, -st.ry * 0.3, st.rx * 0.1, 0, 0, st.rx * 1.15);
         if (layer === 'front') {
           grad.addColorStop(0, '#7889f0');
@@ -947,7 +684,6 @@
         ctx.strokeStyle = layer === 'front' ? 'rgba(165, 185, 255, 0.55)' : 'rgba(110, 130, 220, 0.3)';
         ctx.stroke();
 
-        // Subtle rock ridge highlight
         ctx.beginPath();
         ctx.ellipse(-st.rx * 0.22, -st.ry * 0.22, st.rx * 0.42, st.ry * 0.2, -0.3, 0, Math.PI * 2);
         ctx.fillStyle = 'rgba(200, 215, 255, 0.18)';
@@ -963,7 +699,7 @@
     const viewH = canvas.height / camera.zoom + 70;
     for (const f of foods) {
       if (Math.abs(f.x - camera.x) > viewW || Math.abs(f.y - camera.y) > viewH) continue;
-      const p = 1 + 0.1 * Math.sin(worldTime * 4 + f.pulse);
+      const p = 1 + 0.1 * Math.sin(worldTime * 4 + (f.pulse || 0));
       const r = f.r * p;
 
       ctx.beginPath();
@@ -1065,34 +801,29 @@
     ctxRef.fillStyle = grad;
     ctxRef.fill();
 
-    // Ears
     ctxRef.fillStyle = colorObj.dark;
     ctxRef.beginPath();
     ctxRef.arc(-r * 0.18, -r * 0.36, r * 0.22, 0, Math.PI * 2);
     ctxRef.arc(-r * 0.18, r * 0.36, r * 0.22, 0, Math.PI * 2);
     ctxRef.fill();
 
-    // Eyes
     ctxRef.fillStyle = '#ffffff';
     ctxRef.beginPath();
     ctxRef.ellipse(r * 0.18, -r * 0.24, r * 0.24, r * 0.19, 0, 0, Math.PI * 2);
     ctxRef.ellipse(r * 0.18, r * 0.24, r * 0.24, r * 0.19, 0, 0, Math.PI * 2);
     ctxRef.fill();
 
-    // Pupils
     ctxRef.fillStyle = '#111111';
     ctxRef.beginPath();
     ctxRef.arc(r * 0.26, -r * 0.22, r * 0.1, 0, Math.PI * 2);
     ctxRef.arc(r * 0.26, r * 0.22, r * 0.1, 0, Math.PI * 2);
     ctxRef.fill();
 
-    // Nose
     ctxRef.fillStyle = '#ff6b8b';
     ctxRef.beginPath();
     ctxRef.arc(r * 0.44, 0, r * 0.09, 0, Math.PI * 2);
     ctxRef.fill();
 
-    // Glass shine
     ctxRef.fillStyle = 'rgba(255,255,255,0.5)';
     ctxRef.beginPath();
     ctxRef.ellipse(r * 0.38, -r * 0.42, r * 0.22, r * 0.1, -0.5, 0, Math.PI * 2);
@@ -1103,7 +834,7 @@
 
   function drawSnake(s) {
     if (!s.alive) return;
-    const r = s.getRadius();
+    const r = s.getRadius ? s.getRadius() : Math.min(34, 8.5 + Math.pow(Math.max(0, s.score), 0.39) * 0.92);
     const segs = s.segments;
 
     for (let i = segs.length - 1; i >= 1; i--) {
@@ -1127,7 +858,8 @@
       }
     }
 
-    drawFireFlares(s.x, s.y, s.angle, r, s.getFlareCount(), s.boosting);
+    const flareCount = s.getFlareCount ? s.getFlareCount() : (s === kingSnake ? 5 : 1);
+    drawFireFlares(s.x, s.y, s.angle, r, flareCount, s.boosting);
     drawHeadPuppet(ctx, s.x, s.y, s.angle, r, s.color, s.isPlayer, s.shieldTimer > 0);
 
     ctx.font = 'bold 13px sans-serif';
@@ -1250,6 +982,44 @@
     }
   }
 
+  // ===== Multiplayer Network Sync =====
+  function broadcastState(now) {
+    if (!mpMode || !isHost || now - lastNetSync < 50) return;
+    lastNetSync = now;
+
+    const payload = {
+      type: 'state',
+      snakes: snakes.filter(s => s.alive).map(s => ({
+        netId: s.netId,
+        name: s.name,
+        x: Math.round(s.x),
+        y: Math.round(s.y),
+        angle: Number(s.angle.toFixed(2)),
+        score: Math.floor(s.score),
+        colorIdx: s.colorIdx >= 0 ? s.colorIdx : 0,
+        pattern: s.pattern,
+        boosting: s.boosting,
+        shieldTimer: s.shieldTimer > 0 ? 1 : 0,
+        segments: s.segments.map(pt => [Math.round(pt.x), Math.round(pt.y)])
+      })),
+      foods: foods.map(f => [Math.round(f.x), Math.round(f.y), f.color, f.type === 'medium' ? 1 : 0])
+    };
+
+    guestConns.forEach(g => {
+      if (g.conn.open) g.conn.send(payload);
+    });
+  }
+
+  function sendGuestInput(now) {
+    if (!mpMode || isHost || !hostConn || !hostConn.open || now - lastNetSync < 40) return;
+    lastNetSync = now;
+    hostConn.send({
+      type: 'input',
+      angle: Number(guestTargetAngle.toFixed(3)),
+      boosting: boostHeld
+    });
+  }
+
   // ===== Main Game Loop =====
   function loop(ts) {
     requestAnimationFrame(loop);
@@ -1268,24 +1038,37 @@
       return;
     }
 
-    if (player && player.alive) {
+    if (mpMode && !isHost) {
       if (pointerScreen.active) {
         const dx = pointerScreen.x - canvas.width / 2;
         const dy = pointerScreen.y - canvas.height / 2;
         if (dx * dx + dy * dy > 100) {
-          player.targetAngle = Math.atan2(dy, dx);
+          guestTargetAngle = Math.atan2(dy, dx);
         }
       }
-      player.boosting = boostHeld && player.score >= 100;
-    }
+      sendGuestInput(ts);
+    } else {
+      if (player && player.alive) {
+        if (pointerScreen.active) {
+          const dx = pointerScreen.x - canvas.width / 2;
+          const dy = pointerScreen.y - canvas.height / 2;
+          if (dx * dx + dy * dy > 100) {
+            player.targetAngle = Math.atan2(dy, dx);
+          }
+        }
+        player.boosting = boostHeld && player.score >= 100;
+      }
 
-    for (const s of snakes) s.update(dt);
-    handleInteractions();
+      for (const s of snakes) s.update(dt);
+      handleInteractions();
+      if (mpMode && isHost) broadcastState(ts);
+    }
 
     if (player && player.alive) {
       camera.x += (player.x - camera.x) * Math.min(1, dt * 8);
       camera.y += (player.y - camera.y) * Math.min(1, dt * 8);
-      const targetZoom = Math.max(0.58, 1 - (player.getRadius() - 8.5) * 0.016);
+      const pRad = player.getRadius ? player.getRadius() : Math.min(34, 8.5 + Math.pow(Math.max(0, player.score), 0.39) * 0.92);
+      const targetZoom = Math.max(0.58, 1 - (pRad - 8.5) * 0.016);
       camera.zoom += (targetZoom - camera.zoom) * Math.min(1, dt * 3);
     }
 
@@ -1358,7 +1141,7 @@
   window.addEventListener('keyup', (e) => { if (e.code === 'Space') setBoost(false); });
 
   // ===== Start, Pause, Quit & Game Over =====
-  function startGame() {
+  function startGame(isMultiplayerMatch = false) {
     clearTimeout(gameOverTimer);
     initAudio();
     sfxStart();
@@ -1376,17 +1159,43 @@
     pointerScreen.active = false;
     colorCycleIdx = Math.floor(Math.random() * COLORS.length);
 
-    const pName = (nameInput.value || 'Mc').trim();
-    player = new Snake(pName, 0, 0, COLORS[selectedColorIdx], selectedPattern, true, 0);
-    snakes.push(player);
+    if (!isMultiplayerMatch) {
+      cleanupMultiplayer();
+      const pName = (nameInput.value || 'Mc').trim();
+      player = new Snake(pName, 0, 0, COLORS[selectedColorIdx], selectedPattern, true, 0);
+      snakes.push(player);
+      for (let i = 0; i < AI_COUNT; i++) spawnBot(true);
+      for (let i = 0; i < BASE_FOOD_COUNT; i++) spawnFood();
+    } else if (isHost) {
+      const pName = (nameInput.value || 'Host').trim();
+      player = new Snake(pName, 0, 0, COLORS[selectedColorIdx], selectedPattern, true, 0, myPeerId);
+      snakes.push(player);
 
-    for (let i = 0; i < AI_COUNT; i++) spawnBot(true);
-    for (let i = 0; i < BASE_FOOD_COUNT; i++) spawnFood();
+      let idx = 0;
+      guestConns.forEach((g, pid) => {
+        const angle = (idx / Math.max(1, guestConns.size)) * Math.PI * 2;
+        const gx = Math.cos(angle) * 260;
+        const gy = Math.sin(angle) * 260;
+        const col = COLORS[g.info.colorIdx] || COLORS[0];
+        const gSnake = new Snake(g.info.name, gx, gy, col, g.info.pattern, false, 0, pid);
+        g.snake = gSnake;
+        snakes.push(gSnake);
+        idx++;
+        if (g.conn.open) g.conn.send({ type: 'start' });
+      });
+
+      for (let i = 0; i < MP_AI_COUNT; i++) spawnBot(true);
+      for (let i = 0; i < BASE_FOOD_COUNT; i++) spawnFood();
+    } else {
+      guestAlive = true;
+      player = null;
+    }
 
     camera.x = 0;
     camera.y = 0;
     state = 'playing';
 
+    mpModal.classList.add('hidden');
     startScreen.classList.add('hidden');
     pauseScreen.classList.add('hidden');
     gameOverScreen.classList.add('hidden');
@@ -1395,6 +1204,10 @@
 
   function pauseGame() {
     if (state !== 'playing') return;
+    if (mpMode) {
+      pauseScreen.classList.remove('hidden');
+      return;
+    }
     state = 'paused';
     boostHeld = false;
     bgMusic.pause();
@@ -1402,6 +1215,10 @@
   }
 
   function resumeGame() {
+    if (mpMode) {
+      pauseScreen.classList.add('hidden');
+      return;
+    }
     if (state !== 'paused') return;
     state = 'playing';
     pauseScreen.classList.add('hidden');
@@ -1410,6 +1227,7 @@
 
   function quitGame() {
     clearTimeout(gameOverTimer);
+    cleanupMultiplayer();
     stopMusic();
     showMenu();
   }
@@ -1429,18 +1247,200 @@
     hud.classList.add('hidden');
     pauseScreen.classList.add('hidden');
     gameOverScreen.classList.add('hidden');
+    mpModal.classList.add('hidden');
     startScreen.classList.remove('hidden');
     bestScoreEl.textContent = bestScore;
     lastScoreEl.textContent = lastScore;
     drawPreviewSnake();
   }
 
-  playBtn.addEventListener('click', startGame);
-  retryBtn.addEventListener('click', startGame);
+  playBtn.addEventListener('click', () => startGame(false));
+  retryBtn.addEventListener('click', () => {
+    if (mpMode) quitGame();
+    else startGame(false);
+  });
   exitBtn.addEventListener('click', pauseGame);
   resumeBtn.addEventListener('click', resumeGame);
   quitBtn.addEventListener('click', quitGame);
   menuBtn.addEventListener('click', quitGame);
+
+  // ===== Multiplayer UI & PeerJS Logic =====
+  createRoomBtn.addEventListener('click', () => {
+    if (typeof Peer === 'undefined') {
+      alert('Internet connection required for Multiplayer!');
+      return;
+    }
+    cleanupMultiplayer();
+    mpMode = true;
+    isHost = true;
+
+    mpModalTitle.textContent = 'Create Room';
+    mpStatus.textContent = 'Creating room...';
+    hostBox.classList.remove('hidden');
+    joinBox.classList.add('hidden');
+    startMpGameBtn.classList.add('hidden');
+    roomCodeDisplay.textContent = '----';
+    mpModal.classList.remove('hidden');
+
+    const code = String(Math.floor(1000 + Math.random() * 9000));
+    peer = new Peer(ROOM_PREFIX + code);
+
+    peer.on('open', (id) => {
+      myPeerId = id;
+      roomCodeDisplay.textContent = code;
+      mpStatus.textContent = 'Share this code with friends. Waiting for players...';
+    });
+
+    peer.on('connection', (conn) => {
+      conn.on('data', (data) => {
+        if (data.type === 'join') {
+          guestConns.set(conn.peer, {
+            conn,
+            info: {
+              name: data.name || 'Friend',
+              colorIdx: data.colorIdx ?? 1,
+              pattern: data.pattern || 'star'
+            },
+            snake: null
+          });
+          mpStatus.textContent = `${guestConns.size} friend(s) joined! Ready to start.`;
+          startMpGameBtn.classList.remove('hidden');
+        } else if (data.type === 'input') {
+          const g = guestConns.get(conn.peer);
+          if (g && g.snake && g.snake.alive) {
+            g.snake.targetAngle = data.angle;
+            g.snake.boosting = data.boosting && g.snake.score >= 100;
+          }
+        }
+      });
+
+      conn.on('close', () => {
+        const g = guestConns.get(conn.peer);
+        if (g && g.snake) g.snake.alive = false;
+        guestConns.delete(conn.peer);
+        if (state === 'menu') {
+          mpStatus.textContent = guestConns.size > 0
+            ? `${guestConns.size} friend(s) joined! Ready to start.`
+            : 'Waiting for players...';
+          if (guestConns.size === 0) startMpGameBtn.classList.add('hidden');
+        }
+      });
+    });
+
+    peer.on('error', () => {
+      mpStatus.textContent = 'Connection error. Please try again.';
+    });
+  });
+
+  startMpGameBtn.addEventListener('click', () => {
+    if (isHost && guestConns.size > 0) {
+      startGame(true);
+    }
+  });
+
+  joinRoomBtn.addEventListener('click', () => {
+    if (typeof Peer === 'undefined') {
+      alert('Internet connection required for Multiplayer!');
+      return;
+    }
+    cleanupMultiplayer();
+    mpMode = true;
+    isHost = false;
+
+    mpModalTitle.textContent = 'Join Room';
+    mpStatus.textContent = 'Enter the 4-digit Room Code from your friend.';
+    hostBox.classList.add('hidden');
+    joinBox.classList.remove('hidden');
+    joinCodeInput.value = '';
+    mpModal.classList.remove('hidden');
+  });
+
+  connectRoomBtn.addEventListener('click', () => {
+    const code = joinCodeInput.value.trim();
+    if (code.length < 4) {
+      mpStatus.textContent = 'Please enter a valid 4-digit code.';
+      return;
+    }
+
+    mpStatus.textContent = 'Connecting to room ' + code + '...';
+    peer = new Peer();
+
+    peer.on('open', (id) => {
+      myPeerId = id;
+      hostConn = peer.connect(ROOM_PREFIX + code);
+
+      hostConn.on('open', () => {
+        mpStatus.textContent = 'Connected! Waiting for Host to start...';
+        hostConn.send({
+          type: 'join',
+          name: (nameInput.value || 'Friend').trim(),
+          colorIdx: selectedColorIdx,
+          pattern: selectedPattern
+        });
+      });
+
+      hostConn.on('data', (data) => {
+        if (data.type === 'start') {
+          startGame(true);
+        } else if (data.type === 'state' && state === 'playing') {
+          snakes = data.snakes.map(s => ({
+            netId: s.netId,
+            name: s.name,
+            x: s.x,
+            y: s.y,
+            angle: s.angle,
+            score: s.score,
+            color: COLORS[s.colorIdx] || COLORS[0],
+            pattern: s.pattern,
+            boosting: s.boosting,
+            shieldTimer: s.shieldTimer,
+            alive: true,
+            isPlayer: s.netId === myPeerId,
+            segments: s.segments.map(pt => ({ x: pt[0], y: pt[1] }))
+          }));
+          player = snakes.find(s => s.isPlayer) || player;
+          foods = data.foods.map(f => ({
+            x: f[0],
+            y: f[1],
+            color: f[2],
+            type: f[3] ? 'medium' : 'small',
+            r: f[3] ? 6.8 : 4.0,
+            pulse: 0
+          }));
+        } else if (data.type === 'dead') {
+          guestAlive = false;
+          sfxBlast(1.0);
+          lastScore = data.score || 0;
+          if (lastScore > bestScore) {
+            bestScore = lastScore;
+            localStorage.setItem('st_best', String(bestScore));
+          }
+          if (player) player.alive = false;
+          setTimeout(() => {
+            if (state === 'playing') showGameOver();
+          }, 1500);
+        }
+      });
+
+      hostConn.on('close', () => {
+        if (state === 'playing') {
+          alert('Host disconnected!');
+          quitGame();
+        } else {
+          mpStatus.textContent = 'Disconnected from Host.';
+        }
+      });
+    });
+
+    peer.on('error', () => {
+      mpStatus.textContent = 'Room not found or network error.';
+    });
+  });
+
+  closeMpBtn.addEventListener('click', () => {
+    cleanupMultiplayer();
+    mpModal.classList.add('hidden');
+  });
 
   // ===== Customize Snake Body Preview & Pickers =====
   function drawPreviewSnake() {
@@ -1532,4 +1532,3 @@
 
   requestAnimationFrame(updateFPS);
 })();
-
