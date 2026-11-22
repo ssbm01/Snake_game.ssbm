@@ -70,6 +70,12 @@
         <span class="play-icon">▶</span>
         <span>PLAY</span>
       </button>
+
+      <!-- Multiplayer Buttons -->
+      <div class="mp-row">
+        <button id="createRoomBtn" class="mp-btn">Create Room</button>
+        <button id="joinRoomBtn" class="mp-btn">Join Room</button>
+      </div>
     </div>
 
     <!-- Bottom Customize Snake Body -->
@@ -108,6 +114,29 @@
     </div>
   </div>
 
+  <!-- Multiplayer Room Modal -->
+  <div id="mpModal" class="overlay center-overlay hidden">
+    <div class="modal-card">
+      <h2 id="mpModalTitle">Multiplayer</h2>
+      <p id="mpStatus" class="mp-status">Connecting...</p>
+
+      <!-- Host Section -->
+      <div id="hostBox" class="hidden">
+        <div class="room-code-box">Room Code: <b id="roomCodeDisplay">----</b></div>
+        <button id="startMpGameBtn" class="go-btn primary hidden">Start Match ▶</button>
+      </div>
+
+      <!-- Join Section -->
+      <div id="joinBox" class="hidden">
+        <input type="text" id="joinCodeInput" maxlength="6" placeholder="Enter Room Code" class="mp-input" />
+        <button id="connectRoomBtn" class="go-btn primary">Join ▶</button>
+      </div>
+
+      <button id="closeMpBtn" class="go-btn secondary">Cancel</button>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
   <script src="script.js"></script>
 </body>
 </html>
