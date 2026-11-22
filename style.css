@@ -476,3 +476,76 @@ html, body {
   margin-left: 8px;
   vertical-align: middle;
 }
+
+/* Multiplayer Buttons & Modal */
+.mp-row {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  margin-top: 12px;
+}
+
+.mp-btn {
+  padding: 10px 16px;
+  border-radius: 25px;
+  background: rgba(255, 255, 255, 0.16);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  cursor: pointer;
+  transition: transform 0.15s ease, background 0.2s ease;
+}
+
+.mp-btn:active {
+  transform: scale(0.95);
+  background: rgba(255, 255, 255, 0.28);
+}
+
+.mp-status {
+  font-size: 13px;
+  color: #cbd5e1;
+  margin: 8px 0 14px;
+  text-align: center;
+}
+
+.room-code-box {
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px dashed rgba(255, 255, 255, 0.4);
+  border-radius: 12px;
+  padding: 12px;
+  margin-bottom: 14px;
+  font-size: 16px;
+  color: #ffffff;
+  text-align: center;
+  letter-spacing: 1px;
+}
+
+.room-code-box b {
+  color: #38bdf8;
+  font-size: 20px;
+  letter-spacing: 3px;
+}
+
+.mp-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 12px;
+  margin-bottom: 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  background: rgba(15, 23, 42, 0.6);
+  color: #ffffff;
+  font-size: 16px;
+  font-weight: 700;
+  text-align: center;
+  letter-spacing: 3px;
+  outline: none;
+}
+
+.mp-input:focus {
+  border-color: #38bdf8;
+}
