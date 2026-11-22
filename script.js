@@ -159,11 +159,13 @@
   }
 
   function stopMusic() {
+    if (!bgMusic) return;
     bgMusic.pause();
     bgMusic.currentTime = 0;
   }
 
   document.addEventListener('visibilitychange', () => {
+    if (!bgMusic) return;
     if (document.hidden) {
       bgMusic.pause();
     } else if (state === 'playing') {
@@ -1146,9 +1148,11 @@
     initAudio();
     sfxStart();
 
-    bgMusic.volume = 0.6;
-    bgMusic.currentTime = 0;
-    bgMusic.play().catch(() => {});
+    if (bgMusic) {
+      bgMusic.volume = 0.6;
+      bgMusic.currentTime = 0;
+      bgMusic.play().catch(() => {});
+    }
 
     snakes = [];
     foods = [];
@@ -1195,7 +1199,7 @@
     camera.y = 0;
     state = 'playing';
 
-    mpModal.classList.add('hidden');
+    if (mpModal) mpModal.classList.add('hidden');
     startScreen.classList.add('hidden');
     pauseScreen.classList.add('hidden');
     gameOverScreen.classList.add('hidden');
@@ -1210,7 +1214,7 @@
     }
     state = 'paused';
     boostHeld = false;
-    bgMusic.pause();
+    if (bgMusic) bgMusic.pause();
     pauseScreen.classList.remove('hidden');
   }
 
@@ -1222,7 +1226,7 @@
     if (state !== 'paused') return;
     state = 'playing';
     pauseScreen.classList.add('hidden');
-    bgMusic.play().catch(() => {});
+    if (bgMusic) bgMusic.play().catch(() => {});
   }
 
   function quitGame() {
@@ -1247,7 +1251,7 @@
     hud.classList.add('hidden');
     pauseScreen.classList.add('hidden');
     gameOverScreen.classList.add('hidden');
-    mpModal.classList.add('hidden');
+    if (mpModal) mpModal.classList.add('hidden');
     startScreen.classList.remove('hidden');
     bestScoreEl.textContent = bestScore;
     lastScoreEl.textContent = lastScore;
@@ -1265,182 +1269,192 @@
   menuBtn.addEventListener('click', quitGame);
 
   // ===== Multiplayer UI & PeerJS Logic =====
-  createRoomBtn.addEventListener('click', () => {
-    if (typeof Peer === 'undefined') {
-      alert('Internet connection required for Multiplayer!');
-      return;
-    }
-    cleanupMultiplayer();
-    mpMode = true;
-    isHost = true;
+  if (createRoomBtn) {
+    createRoomBtn.addEventListener('click', () => {
+      if (typeof Peer === 'undefined') {
+        alert('Internet connection required for Multiplayer!');
+        return;
+      }
+      cleanupMultiplayer();
+      mpMode = true;
+      isHost = true;
 
-    mpModalTitle.textContent = 'Create Room';
-    mpStatus.textContent = 'Creating room...';
-    hostBox.classList.remove('hidden');
-    joinBox.classList.add('hidden');
-    startMpGameBtn.classList.add('hidden');
-    roomCodeDisplay.textContent = '----';
-    mpModal.classList.remove('hidden');
+      mpModalTitle.textContent = 'Create Room';
+      mpStatus.textContent = 'Creating room...';
+      hostBox.classList.remove('hidden');
+      joinBox.classList.add('hidden');
+      startMpGameBtn.classList.add('hidden');
+      roomCodeDisplay.textContent = '----';
+      mpModal.classList.remove('hidden');
 
-    const code = String(Math.floor(1000 + Math.random() * 9000));
-    peer = new Peer(ROOM_PREFIX + code);
+      const code = String(Math.floor(1000 + Math.random() * 9000));
+      peer = new Peer(ROOM_PREFIX + code);
 
-    peer.on('open', (id) => {
-      myPeerId = id;
-      roomCodeDisplay.textContent = code;
-      mpStatus.textContent = 'Share this code with friends. Waiting for players...';
-    });
+      peer.on('open', (id) => {
+        myPeerId = id;
+        roomCodeDisplay.textContent = code;
+        mpStatus.textContent = 'Share this code with friends. Waiting for players...';
+      });
 
-    peer.on('connection', (conn) => {
-      conn.on('data', (data) => {
-        if (data.type === 'join') {
-          guestConns.set(conn.peer, {
-            conn,
-            info: {
-              name: data.name || 'Friend',
-              colorIdx: data.colorIdx ?? 1,
-              pattern: data.pattern || 'star'
-            },
-            snake: null
-          });
-          mpStatus.textContent = `${guestConns.size} friend(s) joined! Ready to start.`;
-          startMpGameBtn.classList.remove('hidden');
-        } else if (data.type === 'input') {
-          const g = guestConns.get(conn.peer);
-          if (g && g.snake && g.snake.alive) {
-            g.snake.targetAngle = data.angle;
-            g.snake.boosting = data.boosting && g.snake.score >= 100;
+      peer.on('connection', (conn) => {
+        conn.on('data', (data) => {
+          if (data.type === 'join') {
+            guestConns.set(conn.peer, {
+              conn,
+              info: {
+                name: data.name || 'Friend',
+                colorIdx: data.colorIdx ?? 1,
+                pattern: data.pattern || 'star'
+              },
+              snake: null
+            });
+            mpStatus.textContent = `${guestConns.size} friend(s) joined! Ready to start.`;
+            startMpGameBtn.classList.remove('hidden');
+          } else if (data.type === 'input') {
+            const g = guestConns.get(conn.peer);
+            if (g && g.snake && g.snake.alive) {
+              g.snake.targetAngle = data.angle;
+              g.snake.boosting = data.boosting && g.snake.score >= 100;
+            }
           }
-        }
-      });
+        });
 
-      conn.on('close', () => {
-        const g = guestConns.get(conn.peer);
-        if (g && g.snake) g.snake.alive = false;
-        guestConns.delete(conn.peer);
-        if (state === 'menu') {
-          mpStatus.textContent = guestConns.size > 0
-            ? `${guestConns.size} friend(s) joined! Ready to start.`
-            : 'Waiting for players...';
-          if (guestConns.size === 0) startMpGameBtn.classList.add('hidden');
-        }
-      });
-    });
-
-    peer.on('error', () => {
-      mpStatus.textContent = 'Connection error. Please try again.';
-    });
-  });
-
-  startMpGameBtn.addEventListener('click', () => {
-    if (isHost && guestConns.size > 0) {
-      startGame(true);
-    }
-  });
-
-  joinRoomBtn.addEventListener('click', () => {
-    if (typeof Peer === 'undefined') {
-      alert('Internet connection required for Multiplayer!');
-      return;
-    }
-    cleanupMultiplayer();
-    mpMode = true;
-    isHost = false;
-
-    mpModalTitle.textContent = 'Join Room';
-    mpStatus.textContent = 'Enter the 4-digit Room Code from your friend.';
-    hostBox.classList.add('hidden');
-    joinBox.classList.remove('hidden');
-    joinCodeInput.value = '';
-    mpModal.classList.remove('hidden');
-  });
-
-  connectRoomBtn.addEventListener('click', () => {
-    const code = joinCodeInput.value.trim();
-    if (code.length < 4) {
-      mpStatus.textContent = 'Please enter a valid 4-digit code.';
-      return;
-    }
-
-    mpStatus.textContent = 'Connecting to room ' + code + '...';
-    peer = new Peer();
-
-    peer.on('open', (id) => {
-      myPeerId = id;
-      hostConn = peer.connect(ROOM_PREFIX + code);
-
-      hostConn.on('open', () => {
-        mpStatus.textContent = 'Connected! Waiting for Host to start...';
-        hostConn.send({
-          type: 'join',
-          name: (nameInput.value || 'Friend').trim(),
-          colorIdx: selectedColorIdx,
-          pattern: selectedPattern
+        conn.on('close', () => {
+          const g = guestConns.get(conn.peer);
+          if (g && g.snake) g.snake.alive = false;
+          guestConns.delete(conn.peer);
+          if (state === 'menu') {
+            mpStatus.textContent = guestConns.size > 0
+              ? `${guestConns.size} friend(s) joined! Ready to start.`
+              : 'Waiting for players...';
+            if (guestConns.size === 0) startMpGameBtn.classList.add('hidden');
+          }
         });
       });
 
-      hostConn.on('data', (data) => {
-        if (data.type === 'start') {
-          startGame(true);
-        } else if (data.type === 'state' && state === 'playing') {
-          snakes = data.snakes.map(s => ({
-            netId: s.netId,
-            name: s.name,
-            x: s.x,
-            y: s.y,
-            angle: s.angle,
-            score: s.score,
-            color: COLORS[s.colorIdx] || COLORS[0],
-            pattern: s.pattern,
-            boosting: s.boosting,
-            shieldTimer: s.shieldTimer,
-            alive: true,
-            isPlayer: s.netId === myPeerId,
-            segments: s.segments.map(pt => ({ x: pt[0], y: pt[1] }))
-          }));
-          player = snakes.find(s => s.isPlayer) || player;
-          foods = data.foods.map(f => ({
-            x: f[0],
-            y: f[1],
-            color: f[2],
-            type: f[3] ? 'medium' : 'small',
-            r: f[3] ? 6.8 : 4.0,
-            pulse: 0
-          }));
-        } else if (data.type === 'dead') {
-          guestAlive = false;
-          sfxBlast(1.0);
-          lastScore = data.score || 0;
-          if (lastScore > bestScore) {
-            bestScore = lastScore;
-            localStorage.setItem('st_best', String(bestScore));
+      peer.on('error', () => {
+        mpStatus.textContent = 'Connection error. Please try again.';
+      });
+    });
+  }
+
+  if (startMpGameBtn) {
+    startMpGameBtn.addEventListener('click', () => {
+      if (isHost && guestConns.size > 0) {
+        startGame(true);
+      }
+    });
+  }
+
+  if (joinRoomBtn) {
+    joinRoomBtn.addEventListener('click', () => {
+      if (typeof Peer === 'undefined') {
+        alert('Internet connection required for Multiplayer!');
+        return;
+      }
+      cleanupMultiplayer();
+      mpMode = true;
+      isHost = false;
+
+      mpModalTitle.textContent = 'Join Room';
+      mpStatus.textContent = 'Enter the 4-digit Room Code from your friend.';
+      hostBox.classList.add('hidden');
+      joinBox.classList.remove('hidden');
+      joinCodeInput.value = '';
+      mpModal.classList.remove('hidden');
+    });
+  }
+
+  if (connectRoomBtn) {
+    connectRoomBtn.addEventListener('click', () => {
+      const code = joinCodeInput.value.trim();
+      if (code.length < 4) {
+        mpStatus.textContent = 'Please enter a valid 4-digit code.';
+        return;
+      }
+
+      mpStatus.textContent = 'Connecting to room ' + code + '...';
+      peer = new Peer();
+
+      peer.on('open', (id) => {
+        myPeerId = id;
+        hostConn = peer.connect(ROOM_PREFIX + code);
+
+        hostConn.on('open', () => {
+          mpStatus.textContent = 'Connected! Waiting for Host to start...';
+          hostConn.send({
+            type: 'join',
+            name: (nameInput.value || 'Friend').trim(),
+            colorIdx: selectedColorIdx,
+            pattern: selectedPattern
+          });
+        });
+
+        hostConn.on('data', (data) => {
+          if (data.type === 'start') {
+            startGame(true);
+          } else if (data.type === 'state' && state === 'playing') {
+            snakes = data.snakes.map(s => ({
+              netId: s.netId,
+              name: s.name,
+              x: s.x,
+              y: s.y,
+              angle: s.angle,
+              score: s.score,
+              color: COLORS[s.colorIdx] || COLORS[0],
+              pattern: s.pattern,
+              boosting: s.boosting,
+              shieldTimer: s.shieldTimer,
+              alive: true,
+              isPlayer: s.netId === myPeerId,
+              segments: s.segments.map(pt => ({ x: pt[0], y: pt[1] }))
+            }));
+            player = snakes.find(s => s.isPlayer) || player;
+            foods = data.foods.map(f => ({
+              x: f[0],
+              y: f[1],
+              color: f[2],
+              type: f[3] ? 'medium' : 'small',
+              r: f[3] ? 6.8 : 4.0,
+              pulse: 0
+            }));
+          } else if (data.type === 'dead') {
+            guestAlive = false;
+            sfxBlast(1.0);
+            lastScore = data.score || 0;
+            if (lastScore > bestScore) {
+              bestScore = lastScore;
+              localStorage.setItem('st_best', String(bestScore));
+            }
+            if (player) player.alive = false;
+            setTimeout(() => {
+              if (state === 'playing') showGameOver();
+            }, 1500);
           }
-          if (player) player.alive = false;
-          setTimeout(() => {
-            if (state === 'playing') showGameOver();
-          }, 1500);
-        }
+        });
+
+        hostConn.on('close', () => {
+          if (state === 'playing') {
+            alert('Host disconnected!');
+            quitGame();
+          } else {
+            mpStatus.textContent = 'Disconnected from Host.';
+          }
+        });
       });
 
-      hostConn.on('close', () => {
-        if (state === 'playing') {
-          alert('Host disconnected!');
-          quitGame();
-        } else {
-          mpStatus.textContent = 'Disconnected from Host.';
-        }
+      peer.on('error', () => {
+        mpStatus.textContent = 'Room not found or network error.';
       });
     });
+  }
 
-    peer.on('error', () => {
-      mpStatus.textContent = 'Room not found or network error.';
+  if (closeMpBtn) {
+    closeMpBtn.addEventListener('click', () => {
+      cleanupMultiplayer();
+      mpModal.classList.add('hidden');
     });
-  });
-
-  closeMpBtn.addEventListener('click', () => {
-    cleanupMultiplayer();
-    mpModal.classList.add('hidden');
-  });
+  }
 
   // ===== Customize Snake Body Preview & Pickers =====
   function drawPreviewSnake() {
